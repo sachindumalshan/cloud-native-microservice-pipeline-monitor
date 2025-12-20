@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-metrics-deployment
+  labels:
+    app: health-metrics
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: health-metrics
+  template:
+    metadata:
+      labels:
+        app: health-metrics
+    spec:
+      containers:
+        - name: health-metrics-container
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/health-metrics-service:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
