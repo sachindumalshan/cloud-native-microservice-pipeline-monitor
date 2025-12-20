@@ -39,58 +39,61 @@ jobs:
         run: |
           PYTHONPATH=. pytest
 
+      # 5️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ***
-        
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      # 6️⃣ Verify AWS Identity (troubleshooting)
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
-      
-      - name: Update kubeconfig with role-arn
-        run: |
-          aws eks update-kubeconfig \
-            --region *** \
-            --name *** \
-            --alias github-actions-context
-          
-          # Clear any cached credentials
-          rm -rf ~/.kube/cache
-      
-      - name: Wait for auth to propagate
-        run: sleep 5
-      
-      - name: Test cluster access
-        run: |
-          kubectl get nodes
-          kubectl auth can-i create deployment
 
-      # 6️⃣ Login to ECR
+      # 7️⃣ Login to ECR
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      
-
-      # 7️⃣ Build and push Docker image
+      # 8️⃣ Build and push Docker image
       - name: Build and Push Docker Image
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Update kubeconfig and deploy
+      # 9️⃣ Update kubeconfig for EKS
+      - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
             --region ${{ secrets.AWS_REGION }} \
             --name ${{ secrets.EKS_CLUSTER_NAME }} \
             --alias github-actions-context
+          
+          # Clear any cached credentials
+          rm -rf ~/.kube/cache
       
-          # Verify access
+      # 🔟 Wait for authentication to propagate
+      - name: Wait for auth to propagate
+        run: |
+          echo "Waiting 30 seconds for EKS authentication to propagate..."
+          sleep 30
+      
+      # 1️⃣1️⃣ Verify cluster access
+      - name: Verify cluster access
+        run: |
           kubectl config use-context github-actions-context
+          echo "Checking cluster nodes..."
           kubectl get nodes
+          echo "Checking deployment permissions..."
           kubectl auth can-i create deployment
       
-          # Deploy manifests
+      # 1️⃣2️⃣ Deploy to EKS
+      - name: Deploy to EKS
+        run: |
+          echo "Deploying manifests to EKS cluster..."
           kubectl apply -f k8s/
-        
+          
+          echo "Deployment completed!"
+          kubectl get deployments
+          kubectl get services
+          kubectl get pods
