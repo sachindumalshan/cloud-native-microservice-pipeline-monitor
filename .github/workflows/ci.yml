@@ -57,15 +57,18 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # 8️⃣ Update kubeconfig and deploy to EKS
-      - name: Deploy to EKS
+      - name: Update kubeconfig and deploy
         run: |
-          # Generate kubeconfig using GitHub Actions IAM user
-          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
-
-          # Optional: debug cluster access
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --alias github-actions-context
+      
+          # Verify access
+          kubectl config use-context github-actions-context
           kubectl get nodes
           kubectl auth can-i create deployment
-
-          # Apply Kubernetes manifests
+      
+          # Deploy manifests
           kubectl apply -f k8s/
+        
