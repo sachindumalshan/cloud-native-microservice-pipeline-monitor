@@ -115,22 +115,44 @@ jobs:
           echo "Checking deployment permissions..."
           kubectl auth can-i create deployment
       
-      # 1️⃣2️⃣ Deploy to EKS
+      # 1️⃣2️⃣ Determine namespace based on branch
+      - name: Set namespace based on branch
+        run: |
+          echo "GitHub ref: $GITHUB_REF_NAME"
+          if [ "${GITHUB_REF_NAME}" == "development" ]; then
+            NAMESPACE="dev"
+          elif [ "${GITHUB_REF_NAME}" == "staging" ]; then
+            NAMESPACE="staging"
+          elif [ "${GITHUB_REF_NAME}" == "main" ]; then
+            NAMESPACE="prod"
+          else
+            echo "Unknown branch, skipping deployment"
+            exit 0
+          fi
+          echo "Namespace=$NAMESPACE" >> $GITHUB_ENV
+
+      # 1️⃣3️⃣ Create namespace if it doesn’t exist
+      - name: Create namespace if missing
+        run: |
+          kubectl get namespace ${{ env.Namespace }} || kubectl create namespace ${{ env.Namespace }}
+
+      # 1️⃣4️⃣ Deploy to EKS in correct namespace
       - name: Deploy to EKS
         run: |
-          echo "Deploying manifests to EKS cluster..."
+          echo "Deploying manifests to namespace ${{ env.Namespace }}..."
           
-          # Replace environment variables in manifests and apply
+          # Apply all YAML manifests into the target namespace
           for file in k8s/*.yaml; do
-            envsubst < "$file" | kubectl apply -f -
+            envsubst < "$file" | kubectl apply -f - -n ${{ env.Namespace }}
           done
           
           echo "Deployment completed!"
-          kubectl get deployments
-          kubectl get services
-          kubectl get pods
+          kubectl get deployments -n ${{ env.Namespace }}
+          kubectl get services -n ${{ env.Namespace }}
+          kubectl get pods -n ${{ env.Namespace }}
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: latest
+          Namespace: ${{ env.Namespace }}
