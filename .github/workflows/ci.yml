@@ -155,4 +155,22 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: latest
+          NAMESPACE: ${{ env.Namespace }}
+
+      - name: Notify n8n
+        if: always()  # Run even if previous steps fail
+        run: |
+          STATUS="success"
+          if [ "${{ job.status }}" != "success" ]; then
+            STATUS="failure"
+          fi
+      
+          curl -X POST https://sachindu.app.n8n.cloud/webhook/deployments \
+            -H 'Content-Type: application/json' \
+            -d '{
+                  "service": "health-metrics-service",
+                  "namespace": "${{ env.Namespace }}",
+                  "status": "'"$STATUS"'"
+                }'
+        env:
           Namespace: ${{ env.Namespace }}
