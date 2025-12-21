@@ -61,7 +61,31 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # 9️⃣ Update kubeconfig for EKS
+      # 9️⃣ Check EKS cluster authentication mode
+      - name: Check EKS authentication mode
+        run: |
+          echo "Checking EKS cluster authentication configuration..."
+          aws eks describe-cluster \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }} \
+            --query 'cluster.accessConfig' || echo "AccessConfig not available (older cluster)"
+      
+      # 🔟 Create EKS Access Entry (for API mode clusters)
+      - name: Create EKS Access Entry
+        continue-on-error: true
+        run: |
+          echo "Attempting to create EKS access entry for IAM user..."
+          USER_ARN=$(aws sts get-caller-identity --query 'Arn' --output text)
+          echo "IAM User ARN: $USER_ARN"
+          
+          aws eks create-access-entry \
+            --cluster-name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }} \
+            --principal-arn "$USER_ARN" \
+            --type STANDARD \
+            --kubernetes-groups system:masters || echo "Access entry may already exist or cluster uses ConfigMap mode"
+      
+      # 1️⃣1️⃣ Update kubeconfig for EKS
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
@@ -71,14 +95,18 @@ jobs:
           
           # Clear any cached credentials
           rm -rf ~/.kube/cache
+          
+          # Show the kubeconfig for debugging
+          echo "Kubeconfig context:"
+          kubectl config view --minify
       
-      # 🔟 Wait for authentication to propagate
+      # 1️⃣2️⃣ Wait for authentication to propagate
       - name: Wait for auth to propagate
         run: |
-          echo "Waiting 30 seconds for EKS authentication to propagate..."
-          sleep 30
+          echo "Waiting 10 seconds for EKS authentication to propagate..."
+          sleep 10
       
-      # 1️⃣1️⃣ Verify cluster access
+      # 1️⃣3️⃣ Verify cluster access
       - name: Verify cluster access
         run: |
           kubectl config use-context github-actions-context
@@ -87,13 +115,22 @@ jobs:
           echo "Checking deployment permissions..."
           kubectl auth can-i create deployment
       
-      # Deploy to EKS
+      # 1️⃣2️⃣ Deploy to EKS
       - name: Deploy to EKS
         run: |
           echo "Deploying manifests to EKS cluster..."
-          kubectl apply -f k8s/
+          
+          # Replace environment variables in manifests and apply
+          for file in k8s/*.yaml; do
+            envsubst < "$file" | kubectl apply -f -
+          done
           
           echo "Deployment completed!"
           kubectl get deployments
           kubectl get services
           kubectl get pods
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: latest

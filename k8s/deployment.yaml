@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: health-metrics-container
-          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/health-metrics-service:latest
+          image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}
           ports:
             - containerPort: 8000
           readinessProbe:
