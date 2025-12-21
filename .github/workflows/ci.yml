@@ -87,7 +87,7 @@ jobs:
           echo "Checking deployment permissions..."
           kubectl auth can-i create deployment
       
-      # 1️⃣2️⃣ Deploy to EKS
+      # Deploy to EKS
       - name: Deploy to EKS
         run: |
           echo "Deploying manifests to EKS cluster..."
