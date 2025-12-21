@@ -165,7 +165,7 @@ jobs:
             STATUS="failure"
           fi
       
-          curl -X POST https://sachindu.app.n8n.cloud/webhook/deployments \
+          curl -X POST https://sachindu.app.n8n.cloud/webhook-test/deployments \
             -H 'Content-Type: application/json' \
             -d '{
                   "service": "health-metrics-service",
