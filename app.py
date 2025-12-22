@@ -112,7 +112,7 @@ def root():
         <p>Welcome to the enterprise monitoring and health check system. Access real-time metrics and dashboards below.</p>
         <div class="links">
             <a href="/dashboard" class="link-btn">📊 Live Dashboard</a>
-            <a href="/health" class="link-btn secondary">💚 Health Check</a>
+            <a href="/health-page" class="link-btn secondary">💚 Health Status Page</a>
             <a href="/metrics" class="link-btn tertiary">📈 Prometheus Metrics</a>
         </div>
     </div>
@@ -121,10 +121,17 @@ def root():
 """
 
 # =======================
-# Health endpoint - Beautiful status page
+# Health endpoint - JSON (for tests/monitoring)
 # =======================
-@app.get("/health", response_class=HTMLResponse)
-def health_check():
+@app.get("/health")
+def health_check_json():
+    return {"status": "healthy"}
+
+# =======================
+# Health page - Beautiful status page
+# =======================
+@app.get("/health-page", response_class=HTMLResponse)
+def health_check_page():
     cpu = psutil.cpu_percent(interval=0.1)
     memory = psutil.virtual_memory().percent
     
