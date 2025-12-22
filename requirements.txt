@@ -3,3 +3,4 @@ uvicorn
 pytest
 httpx
 prometheus-client
+psutil
