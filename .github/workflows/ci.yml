@@ -70,21 +70,6 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'cluster.accessConfig' || echo "AccessConfig not available (older cluster)"
       
-      # 🔟 Create EKS Access Entry (for API mode clusters)
-      - name: Create EKS Access Entry
-        continue-on-error: true
-        run: |
-          echo "Attempting to create EKS access entry for IAM user..."
-          USER_ARN=$(aws sts get-caller-identity --query 'Arn' --output text)
-          echo "IAM User ARN: $USER_ARN"
-          
-          aws eks create-access-entry \
-            --cluster-name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region ${{ secrets.AWS_REGION }} \
-            --principal-arn "$USER_ARN" \
-            --type STANDARD \
-            --kubernetes-groups system:masters || echo "Access entry may already exist or cluster uses ConfigMap mode"
-      
       # 1️⃣1️⃣ Update kubeconfig for EKS
       - name: Update kubeconfig
         run: |
@@ -157,7 +142,7 @@ jobs:
           IMAGE_TAG: latest
           NAMESPACE: ${{ env.Namespace }}
 
-      - name: Notify n8n
+      - name: Notify n8n 
         if: always()  # Run even if previous steps fail
         run: |
           STATUS="success"
