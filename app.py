@@ -29,7 +29,7 @@ def root():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Health Metrics Service</title>
+    <title>Health Metrics Service - Development </title>
     <style>
         * {
             margin: 0;
