@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
+      - development
+      - staging
   pull_request:
     branches:
       - main
+      - development
+      - staging
 
 jobs:
   build-and-deploy:
@@ -18,28 +22,28 @@ jobs:
       IMAGE_TAG: latest
 
     steps:
-      # 1️⃣ Checkout code
+      # Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Python
+      # Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # 3️⃣ Install dependencies
+      # Install dependencies
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4️⃣ Run tests
+      # Run tests
       - name: Run tests
         run: |
           PYTHONPATH=. pytest
 
-      # 5️⃣ Configure AWS credentials
+      # Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -47,21 +51,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
       
-      # 6️⃣ Verify AWS Identity (troubleshooting)
+      # Verify AWS Identity (troubleshooting)
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
-      # 7️⃣ Login to ECR
+      # Login to ECR
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 8️⃣ Build and push Docker image
+      # Build and push Docker image
       - name: Build and Push Docker Image
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # 9️⃣ Check EKS cluster authentication mode
+      # Check EKS cluster authentication mode
       - name: Check EKS authentication mode
         run: |
           echo "Checking EKS cluster authentication configuration..."
@@ -70,7 +74,7 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'cluster.accessConfig' || echo "AccessConfig not available (older cluster)"
       
-      # 1️⃣1️⃣ Update kubeconfig for EKS
+      # Update kubeconfig for EKS
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
@@ -85,13 +89,13 @@ jobs:
           echo "Kubeconfig context:"
           kubectl config view --minify
       
-      # 1️⃣2️⃣ Wait for authentication to propagate
+      # Wait for authentication to propagate
       - name: Wait for auth to propagate
         run: |
           echo "Waiting 10 seconds for EKS authentication to propagate..."
           sleep 10
       
-      # 1️⃣3️⃣ Verify cluster access
+      # Verify cluster access
       - name: Verify cluster access
         run: |
           kubectl config use-context github-actions-context
@@ -100,7 +104,7 @@ jobs:
           echo "Checking deployment permissions..."
           kubectl auth can-i create deployment
       
-      # 1️⃣2️⃣ Determine namespace based on branch
+      # Determine namespace based on branch
       - name: Set namespace based on branch
         run: |
           echo "GitHub ref: $GITHUB_REF_NAME"
@@ -116,45 +120,46 @@ jobs:
           fi
           echo "Namespace=$NAMESPACE" >> $GITHUB_ENV
 
-      # 1️⃣3️⃣ Create namespace if it doesn’t exist
+      # Create namespace if it doesn’t exist
       - name: Create namespace if missing
         run: |
           kubectl get namespace ${{ env.Namespace }} || kubectl create namespace ${{ env.Namespace }}
+        env:
+          NAMESPACE: ${{ env.Namespace }}
 
-      # 1️⃣4️⃣ Deploy to EKS in correct namespace
+      # Deploy to EKS
       - name: Deploy to EKS
+        id: deploy_eks
         run: |
           echo "Deploying manifests to namespace ${{ env.Namespace }}..."
-          
-          # Apply all YAML manifests into the target namespace
+      
           for file in k8s/*.yaml; do
             envsubst < "$file" | kubectl apply -f - -n ${{ env.Namespace }}
           done
-          
-          echo "Deployment completed!"
+      
           kubectl get deployments -n ${{ env.Namespace }}
           kubectl get services -n ${{ env.Namespace }}
-          kubectl get pods -n ${{ env.Namespace }}
+          kubectl get pods -n ${{ env.Namespace }}        
         env:
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-          IMAGE_TAG: latest
           NAMESPACE: ${{ env.Namespace }}
 
-      - name: Notify n8n 
-        if: always()  # Run even if previous steps fail
+      # Notify n8n
+      - name: Notify n8n (Deploy Result)
+        if: steps.deploy_eks.outcome == 'success' || steps.deploy_eks.outcome == 'failure'
         run: |
-          STATUS="success"
-          if [ "${{ job.status }}" != "success" ]; then
+          echo "Sending deployment status to n8n..."
+
+          if [ "${{ steps.deploy_eks.outcome }}" = "success" ]; then
+            STATUS="success"
+          else
             STATUS="failure"
           fi
-      
+
           curl -X POST https://sachindu.app.n8n.cloud/webhook-test/deployments \
             -H 'Content-Type: application/json' \
             -d '{
                   "service": "health-metrics-service",
-                  "namespace": "${{ env.Namespace }}",
+                  "namespace": "'"${{ env.Namespace }}"'",
                   "status": "'"$STATUS"'"
                 }'
         env:
